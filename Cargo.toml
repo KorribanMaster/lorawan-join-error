@@ -47,10 +47,11 @@ critical-section = "1.2.0"
 static_cell      = "2.1.1"
 rand             = { version = "0.8", default-features = false }
 fugit            = "0.3"
-lora-phy = { git = "https://github.com/lora-rs/lora-rs", branch = "main", features = ["lorawan-radio"] }
+lora-phy = { git = "https://github.com/lora-rs/lora-rs", branch = "main", features = ["lorawan-radio", "defmt-03"] }
 lorawan-device = { git = "https://github.com/lora-rs/lora-rs", branch = "main", default-features = false, features = [
     "embassy-time",
     "region-eu868",
+    "defmt-03"
 ] }
 embassy-embedded-hal = { version = "0.5.0", features = ["defmt"] }
 embassy-sync = "0.7.2"

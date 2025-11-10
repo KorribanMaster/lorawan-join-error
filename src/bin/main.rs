@@ -7,7 +7,7 @@
 )]
 
 use bt_hci::controller::ExternalController;
-use defmt::info;
+use defmt::{error, info, warn};
 use embassy_executor::Spawner;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::mutex::Mutex;
@@ -39,6 +39,7 @@ const MAX_TX_POWER: u8 = 14;
 include!(concat!(env!("OUT_DIR"), "/lorawan_keys.rs"));
 
 // Fallback values
+// 
 const DEFAULT_DEVEUI: [u8; 8] = [0, 0, 0, 0, 0, 0, 0, 0];
 const DEFAULT_APPEUI: [u8; 8] = [0, 0, 0, 0, 0, 0, 0, 0];
 const DEFAULT_APPKEY: [u8; 16] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
@@ -130,14 +131,17 @@ async fn main(spawner: Spawner) -> ! {
     let rng = esp_hal::rng::Rng::new();
     let mut device: Device<_, _, _> = Device::new(region, radio, EmbassyTimer::new(), rng);
 
-    let deveui = DEVEUI.unwrap_or(DEFAULT_DEVEUI);
-    let appeui = APPEUI.unwrap_or(DEFAULT_APPEUI);
-    let appkey = APPKEY.unwrap_or(DEFAULT_APPKEY);
+    let mut deveui = DEVEUI.unwrap_or(DEFAULT_DEVEUI);
+    // deveui.reverse();
+    let mut appeui = APPEUI.unwrap_or(DEFAULT_APPEUI);
+    // appeui.reverse();
+    let mut appkey = APPKEY.unwrap_or(DEFAULT_APPKEY);
+    // appkey.reverse();
 
     info!("LoRaWAN Credentials:");
-    info!("  DevEUI: {:02x}", deveui);
-    info!("  AppEUI: {:02x}", appeui);
-    info!("  AppKey: {:02x}", appkey);
+    info!("  DevEUI: {:?}", deveui);
+    info!("  AppEUI: {:?}", appeui);
+    info!("  AppKey: {:?}", appkey);
     info!("Joining LoRaWAN network");
 
     let join_mode = JoinMode::OTAA {
@@ -150,9 +154,17 @@ async fn main(spawner: Spawner) -> ! {
 
     loop {
         let join_result = device.join(&join_mode).await;
-        if let Ok(JoinResponse::JoinSuccess) = join_result {
-            info!("LoRaWAN network joined");
-            break;
+        match join_result {
+            Ok(JoinResponse::JoinSuccess) => {
+                info!("LoRaWAN network joined");
+                break;
+            }
+            Ok(JoinResponse::NoJoinAccept) => {
+                warn!("LoRaWAN network did not accept");
+            }
+            Err(e) => {
+                error!("Error joining LoRaWAN network: {}", e)
+            }
         }
         let delay = generate_delay(&mut device.rng, retries);
 
