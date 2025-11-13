@@ -27,7 +27,9 @@ use lora_phy::sx126x::Sx126x;
 use lora_phy::sx126x::TcxoCtrlVoltage;
 use lora_phy::LoRa;
 use lora_phy::lorawan_radio::LorawanRadio;
-use lorawan_device::async_device::{region, Device, EmbassyTimer, JoinMode, JoinResponse};
+use lorawan_device::async_device::{region, Device, JoinMode, JoinResponse};
+use lorawan_device::default_crypto::DefaultFactory as Crypto;
+use lora_experiment::SimpleTimer;
 use lorawan_device::{AppEui, AppKey, DevEui};
 
 // warning: set these appropriately for the region
@@ -129,19 +131,21 @@ async fn main(spawner: Spawner) -> ! {
     let radio: LorawanRadio<_, _, MAX_TX_POWER> = lora.into();
     let region: region::Configuration = region::Configuration::new(LORAWAN_REGION);
     let rng = esp_hal::rng::Rng::new();
-    let mut device: Device<_, _, _> = Device::new(region, radio, EmbassyTimer::new(), rng);
+    let mut rng2 = esp_hal::rng::Rng::new(); // Separate RNG for delay generation
+    let timer = SimpleTimer::new();
+    let mut device: Device<_, Crypto, _, _> = Device::new(region, radio, timer, rng);
 
-    let mut deveui = DEVEUI.unwrap_or(DEFAULT_DEVEUI);
+    let deveui = DEVEUI.unwrap_or(DEFAULT_DEVEUI);
     // deveui.reverse();
-    let mut appeui = APPEUI.unwrap_or(DEFAULT_APPEUI);
+    let appeui = APPEUI.unwrap_or(DEFAULT_APPEUI);
     // appeui.reverse();
-    let mut appkey = APPKEY.unwrap_or(DEFAULT_APPKEY);
+    let appkey = APPKEY.unwrap_or(DEFAULT_APPKEY);
     // appkey.reverse();
 
     info!("LoRaWAN Credentials:");
-    info!("  DevEUI: {:?}", deveui);
-    info!("  AppEUI: {:?}", appeui);
-    info!("  AppKey: {:?}", appkey);
+    info!("  DevEUI: {:#x}", deveui);
+    info!("  AppEUI: {:#x}", appeui);
+    info!("  AppKey: {:#x}", appkey);
     info!("Joining LoRaWAN network");
 
     let join_mode = JoinMode::OTAA {
@@ -166,7 +170,7 @@ async fn main(spawner: Spawner) -> ! {
                 error!("Error joining LoRaWAN network: {}", e)
             }
         }
-        let delay = generate_delay(&mut device.rng, retries);
+        let delay = generate_delay(&mut rng2, retries);
 
         info!("Join failed. Retrying in {} seconds..", delay);
         Timer::after(Duration::from_secs(delay.into())).await;

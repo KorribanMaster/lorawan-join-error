@@ -46,12 +46,19 @@ fn parse_lorawan_id(val: Option<&str>, var: &str, len: usize) -> Option<String> 
 fn main() {
     let out = &PathBuf::from(env::var_os("OUT_DIR").unwrap());
 
+    // Load .env file if it exists
+    dotenvy::dotenv().ok();
+
     // Generate LoRaWAN eui and key overrides from environment variables
     {
         let path = &out.join("lorawan_keys.rs");
         let mut file = BufWriter::new(File::create(path).unwrap());
 
-        // TODO: Figure out how to not generate this file every time...
+        // Now read from env::var() which will see the loaded .env variables
+        let deveui = parse_lorawan_id(env::var("LORA_DEVEUI").ok().as_deref(), "LORA_DEVEUI", 8);
+        let appeui = parse_lorawan_id(env::var("LORA_APPEUI").ok().as_deref(), "LORA_APPEUI", 8);
+        let appkey = parse_lorawan_id(env::var("LORA_APPKEY").ok().as_deref(), "LORA_APPKEY", 16);
+
         write!(
             &mut file,
             "{}",
@@ -61,9 +68,9 @@ fn main() {
             const DEVEUI: Option<[u8; 8]> = {};\n\
             const APPEUI: Option<[u8; 8]> = {};\n\
             const APPKEY: Option<[u8; 16]> = {};\n",
-                parse_lorawan_id(option_env!("LORA_DEVEUI"), "LORA_DEVEUI", 8).unwrap_or("None".to_string()),
-                parse_lorawan_id(option_env!("LORA_APPEUI"), "LORA_APPEUI", 8).unwrap_or("None".to_string()),
-                parse_lorawan_id(option_env!("LORA_APPKEY"), "LORA_APPKEY", 16).unwrap_or("None".to_string()),
+                deveui.unwrap_or("None".to_string()),
+                appeui.unwrap_or("None".to_string()),
+                appkey.unwrap_or("None".to_string()),
             )
         )
         .unwrap();

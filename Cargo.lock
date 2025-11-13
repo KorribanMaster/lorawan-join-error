@@ -26,6 +26,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a23eb6b1614318a8071c9b2521f36b424b2c83db5eb3a0fead4a6c0809af6e61"
 
 [[package]]
+name = "atomic-polyfill"
+version = "1.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8cf2bce30dfe09ef0bfaef228b9d414faaf7e563035494d7fe092dba54b300f4"
+dependencies = [
+ "critical-section",
+]
+
+[[package]]
 name = "autocfg"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -339,6 +348,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "dotenvy"
+version = "0.15.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1aaf95b3e5c8f23aa320147307562d361db0ae0d51242340f558153b4eb2439b"
+
+[[package]]
 name = "embassy-embedded-hal"
 version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -432,22 +447,6 @@ dependencies = [
  "futures-core",
  "futures-sink",
  "heapless 0.8.0",
-]
-
-[[package]]
-name = "embassy-time"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f820157f198ada183ad62e0a66f554c610cdcd1a9f27d4b316358103ced7a1f8"
-dependencies = [
- "cfg-if",
- "critical-section",
- "document-features",
- "embassy-time-driver",
- "embedded-hal 0.2.7",
- "embedded-hal 1.0.0",
- "embedded-hal-async",
- "futures-util",
 ]
 
 [[package]]
@@ -1109,6 +1108,15 @@ dependencies = [
 
 [[package]]
 name = "hash32"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b0c35f58762feb77d74ebe43bdbc3210f09be9fe6742234d573bacc26ed92b67"
+dependencies = [
+ "byteorder",
+]
+
+[[package]]
+name = "hash32"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "47d60b12902ba28e2730cd37e95b8c9223af2808df9e902d4df49588d1470606"
@@ -1124,12 +1132,25 @@ checksum = "5419bdc4f6a9207fbeba6d11b604d481addf78ecd10c11ad51e76c2f6482748d"
 
 [[package]]
 name = "heapless"
+version = "0.7.17"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cdc6457c0eb62c71aac4bc17216026d8410337c4126773b9c5daba343f17964f"
+dependencies = [
+ "atomic-polyfill",
+ "hash32 0.2.1",
+ "rustc_version",
+ "spin",
+ "stable_deref_trait",
+]
+
+[[package]]
+name = "heapless"
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0bfb9eb618601c89945a70e254898da93b13be0388091d42117462b265bb3fad"
 dependencies = [
  "defmt 0.3.100",
- "hash32",
+ "hash32 0.3.1",
  "stable_deref_trait",
 ]
 
@@ -1140,7 +1161,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b1edcd5a338e64688fbdcb7531a846cfd3476a54784dcb918a0844682bc7ada5"
 dependencies = [
  "defmt 1.0.1",
- "hash32",
+ "hash32 0.3.1",
  "stable_deref_trait",
 ]
 
@@ -1283,10 +1304,11 @@ dependencies = [
  "bt-hci",
  "critical-section",
  "defmt 1.0.1",
+ "dotenvy",
  "embassy-embedded-hal",
  "embassy-executor",
  "embassy-sync 0.7.2",
- "embassy-time 0.5.0",
+ "embassy-time",
  "embedded-io 0.7.1",
  "embedded-io-async 0.7.0",
  "esp-alloc",
@@ -1307,18 +1329,19 @@ dependencies = [
 [[package]]
 name = "lora-modulation"
 version = "0.1.5"
-source = "git+https://github.com/lora-rs/lora-rs?branch=main#bddc95319658490f3bc698e3aeef2c379f1435e9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2c96c4a41a1f1ad04de765306e1829c7007a37898fe4033204fa82cf2e055624"
 dependencies = [
  "defmt 0.3.100",
 ]
 
 [[package]]
 name = "lora-phy"
-version = "3.0.2-alpha"
-source = "git+https://github.com/lora-rs/lora-rs?branch=main#bddc95319658490f3bc698e3aeef2c379f1435e9"
+version = "3.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "61471c3b2909789e3332083577f6cf6c41a4fcf37674ef15156bcbb20504ac65"
 dependencies = [
  "defmt 0.3.100",
- "document-features",
  "embedded-hal 1.0.0",
  "embedded-hal-async",
  "lora-modulation",
@@ -1328,40 +1351,33 @@ dependencies = [
 
 [[package]]
 name = "lorawan"
-version = "0.9.1"
-source = "git+https://github.com/lora-rs/lora-rs?branch=main#bddc95319658490f3bc698e3aeef2c379f1435e9"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "39a6ce62c8de171d3b75cb6046580e7b2a97ac91ebb8d8244dc1d8f7de3cbf47"
 dependencies = [
  "aes",
  "cmac",
  "defmt 0.3.100",
+ "generic-array",
  "hex",
- "lorawan-macros",
 ]
 
 [[package]]
 name = "lorawan-device"
 version = "0.12.2"
-source = "git+https://github.com/lora-rs/lora-rs?branch=main#bddc95319658490f3bc698e3aeef2c379f1435e9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fbb0f66b5f560597f29a9a35ee35a55134d62cf58ec5164ba30cb9a3d5b8c34b"
 dependencies = [
  "defmt 0.3.100",
  "document-features",
- "embassy-time 0.4.0",
  "fastrand",
  "futures",
- "heapless 0.8.0",
+ "generic-array",
+ "heapless 0.7.17",
  "lora-modulation",
  "lorawan",
  "rand_core 0.6.4",
-]
-
-[[package]]
-name = "lorawan-macros"
-version = "0.1.0"
-source = "git+https://github.com/lora-rs/lora-rs?branch=main#bddc95319658490f3bc698e3aeef2c379f1435e9"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.108",
+ "seq-macro",
 ]
 
 [[package]]
@@ -1629,6 +1645,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "rustc_version"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cfcb3a22ef46e85b45de6ee7e79d063319ebb6594faafcf1c225ea92ab6e9b92"
+dependencies = [
+ "semver",
+]
+
+[[package]]
 name = "rustversion"
 version = "1.0.22"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1651,6 +1676,18 @@ name = "semihosting"
 version = "0.1.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c3e1c7d2b77d80283c750a39c52f1ab4d17234e8f30bca43550f5b2375f41d5f"
+
+[[package]]
+name = "semver"
+version = "1.0.27"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d767eb0aabc880b29956c35734170f26ed551a859dbd361d140cdbeca61ab1e2"
+
+[[package]]
+name = "seq-macro"
+version = "0.3.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1bc711410fbe7399f390ca1c3b60ad0f53f80e95c5eb935e52268a0e2cd49acc"
 
 [[package]]
 name = "serde"
@@ -1723,6 +1760,15 @@ name = "somni-parser"
 version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a0f368519fc6c85fc1afdb769fb5a51123f6158013e143656e25a3485a0d401c"
+
+[[package]]
+name = "spin"
+version = "0.9.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6980e8d7511241f8acf4aebddbb1ff938df5eebe98691418c4468d0b72a96a67"
+dependencies = [
+ "lock_api",
+]
 
 [[package]]
 name = "stable_deref_trait"
@@ -1875,7 +1921,7 @@ dependencies = [
  "bt-hci",
  "embassy-futures",
  "embassy-sync 0.7.2",
- "embassy-time 0.5.0",
+ "embassy-time",
  "embedded-io 0.6.1",
  "futures",
  "heapless 0.9.1",

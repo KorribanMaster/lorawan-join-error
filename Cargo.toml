@@ -47,14 +47,19 @@ critical-section = "1.2.0"
 static_cell      = "2.1.1"
 rand             = { version = "0.8", default-features = false }
 fugit            = "0.3"
-lora-phy = { git = "https://github.com/lora-rs/lora-rs", branch = "main", features = ["lorawan-radio", "defmt-03"] }
-lorawan-device = { git = "https://github.com/lora-rs/lora-rs", branch = "main", default-features = false, features = [
-    "embassy-time",
-    "region-eu868",
-    "defmt-03"
-] }
+# lora-phy = { git = "https://github.com/lora-rs/lora-rs", branch = "main", features = ["lorawan-radio", "defmt-03"] }
+# lorawan-device = { git = "https://github.com/lora-rs/lora-rs", branch = "main", default-features = false, features = [
+#     "embassy-time",
+#     "region-eu868",
+#     "defmt-03"
+# ] }
 embassy-embedded-hal = { version = "0.5.0", features = ["defmt"] }
 embassy-sync = "0.7.2"
+lora-phy = { version = "3.0.1", features = ["lorawan-radio"] }
+lorawan-device = { version = "0.12.2", features = ["region-eu868", "default-crypto"], default-features = false }
+
+[build-dependencies]
+dotenvy = "0.15.7"
 
 [profile.dev]
 # Rust debug is too slow.
