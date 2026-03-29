@@ -68,7 +68,7 @@ static SPI_BUS: StaticCell<
 > = StaticCell::new();
 
 // Channel for sharing Victron device data between BLE scanner and LoRaWAN sender
-static VICTRON_DATA_CHANNEL: StaticCell<Channel<CriticalSectionRawMutex, Option<DeviceData>, 1>> = StaticCell::new();
+static VICTRON_DATA_CHANNEL: StaticCell<Channel<CriticalSectionRawMutex, Option<DeviceData>, 10>> = StaticCell::new();
 
 // This creates a default app-descriptor required by the esp-idf bootloader.
 // For more information see: <https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/system/app_image_format.html#application-description>
@@ -76,14 +76,16 @@ esp_bootloader_esp_idf::esp_app_desc!();
 
 /// Event handler for BLE advertisements - processes Victron device data
 struct VictronEventHandler {
-    channel: &'static Channel<CriticalSectionRawMutex, Option<DeviceData>, 1>,
+    channel: &'static Channel<CriticalSectionRawMutex, Option<DeviceData>, 10>,
 }
 
 impl EventHandler for VictronEventHandler {
     fn on_adv_reports(&self, mut it: LeAdvReportsIter<'_>) {
         let scanner = VictronScanner::new(&ENCRYPTION_KEYS);
 
+        let mut adv_count = 0;
         while let Some(Ok(report)) = it.next() {
+            adv_count += 1;
             // Get raw advertisement data
             let adv_data = report.data;
 
@@ -113,7 +115,7 @@ impl EventHandler for VictronEventHandler {
 
                         if company_id == VICTRON_MANUFACTURER_ID {
                             info!(
-                                "Found Victron device: {:x}, RSSI: {} dBm",
+                                "Found Victron device: {:x}, RSSI: {} dBm, trying to send to channel",
                                 report.addr, report.rssi
                             );
 
@@ -239,12 +241,21 @@ impl EventHandler for VictronEventHandler {
                                     }
 
                                     // Send to channel (non-blocking, overwrites old data)
-                                    self.channel.try_send(Some(device_data)).ok();
+                                    match self.channel.try_send(Some(device_data)) {
+                                        Ok(_) => {
+                                            info!("Successfully sent data to channel");
+                                        }
+                                        Err(e) => {
+                                            warn!("Failed to send to channel: {:?}", e);
+                                        }
+                                    }
                                 }
                                 Err(e) => {
                                     warn!("Failed to parse Victron data: {:?}", e);
                                 }
                             }
+                        } else {
+                            // info!("Unknown manufacturer id {:x}", company_id);
                         }
                     }
                 }
@@ -252,13 +263,17 @@ impl EventHandler for VictronEventHandler {
                 i += 1 + length;
             }
         }
+
+        if adv_count > 0 {
+            info!("Received {} advertisements in this batch", adv_count);
+        }
     }
 }
 
 /// LoRaWAN task - handles network joining and data transmission
 #[embassy_executor::task]
 async fn lorawan_task(
-    victron_channel: &'static Channel<CriticalSectionRawMutex, Option<DeviceData>, 1>,
+    victron_channel: &'static Channel<CriticalSectionRawMutex, Option<DeviceData>, 10>,
 ) {
     info!("LoRaWAN task starting...");
 
@@ -362,7 +377,14 @@ async fn lorawan_task(
 
     loop {
         // Try to get latest Victron data from channel (non-blocking)
+        info!("LoRaWAN: Checking channel for Victron data...");
         let victron_data = victron_channel.try_receive().ok().flatten();
+
+        if victron_data.is_some() {
+            info!("LoRaWAN: Found Victron data in channel");
+        } else {
+            info!("LoRaWAN: No Victron data in channel");
+        }
 
         let (data, fport) = if let Some(device_data) = victron_data {
             // Pack Victron data into binary format
@@ -475,7 +497,7 @@ async fn main(spawner: Spawner) -> ! {
     let scan_config = ScanConfig {
         active: true,
         phys: PhySet::M1,
-        interval: Duration::from_millis(200),
+        interval: Duration::from_millis(100),
         window: Duration::from_millis(100),
         ..Default::default()
     };
@@ -488,21 +510,18 @@ async fn main(spawner: Spawner) -> ! {
         runner.run_with_handler(&handler),
         async {
             loop {
-                info!("Initiating BLE scan...");
+                info!("Starting BLE scan session...");
                 match scanner.scan(&scan_config).await {
-                    Ok(_session) => {
+                    Ok(session) => {
                         info!("BLE scan session started successfully");
-
-                        // Keep the session alive - scanning continues as long as _session is in scope
-                        // The scan will run until the session is dropped or an error occurs
-                        loop {
-                            Timer::after(Duration::from_secs(10)).await;
-                        }
+                        // Keep scanning for 5 seconds, then restart to clear duplicate filter
+                        Timer::after(Duration::from_secs(25)).await;
+                        drop(session);
+                        info!("Restarting scan to clear duplicate filter...");
                     }
                     Err(e) => {
-                        error!("Failed to start BLE scan: {:?}", e);
-                        Timer::after(Duration::from_secs(5)).await;
-                        // Loop will retry scanning
+                        warn!("Failed to start BLE scan: {:?}", e);
+                        Timer::after(Duration::from_secs(1)).await;
                     }
                 }
             }
