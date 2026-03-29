@@ -31,6 +31,7 @@ use lorawan_device::async_device::{region, Device, JoinMode, JoinResponse};
 use lorawan_device::default_crypto::DefaultFactory as Crypto;
 use lora_experiment::SimpleTimer;
 use lorawan_device::{AppEui, AppKey, DevEui};
+use rand::prelude::*;
 
 // warning: set these appropriately for the region
 const LORAWAN_REGION: region::Region = region::Region::EU868;
@@ -124,7 +125,7 @@ async fn main(spawner: Spawner) -> ! {
 
     // Create the radio instance
     let iv = GenericSx126xInterfaceVariant::new(reset, dio1, busy, None, None).unwrap();
-    let lora = LoRa::new(Sx126x::new(spi_device, iv, sx126x_config), false, Delay)
+    let lora = LoRa::new(Sx126x::new(spi_device, iv, sx126x_config), true, Delay)
         .await
         .unwrap();
 
@@ -135,8 +136,8 @@ async fn main(spawner: Spawner) -> ! {
     let timer = SimpleTimer::new();
     let mut device: Device<_, Crypto, _, _> = Device::new(region, radio, timer, rng);
 
-    let deveui = DEVEUI.unwrap_or(DEFAULT_DEVEUI);
-    // deveui.reverse();
+    let mut deveui = DEVEUI.unwrap_or(DEFAULT_DEVEUI);
+    deveui.reverse();
     let appeui = APPEUI.unwrap_or(DEFAULT_APPEUI);
     // appeui.reverse();
     let appkey = APPKEY.unwrap_or(DEFAULT_APPKEY);

@@ -56,7 +56,7 @@ fugit            = "0.3"
 embassy-embedded-hal = { version = "0.5.0", features = ["defmt"] }
 embassy-sync = "0.7.2"
 lora-phy = { version = "3.0.1", features = ["lorawan-radio"] }
-lorawan-device = { version = "0.12.2", features = ["region-eu868", "default-crypto"], default-features = false }
+lorawan-device = { version = "0.12.2", features = ["region-eu868", "default-crypto", "defmt"], default-features = false }
 
 [build-dependencies]
 dotenvy = "0.15.7"
