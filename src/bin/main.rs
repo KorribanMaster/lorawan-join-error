@@ -31,7 +31,6 @@ use lorawan_device::async_device::{region, Device, JoinMode, JoinResponse};
 use lorawan_device::default_crypto::DefaultFactory as Crypto;
 use lora_experiment::SimpleTimer;
 use lorawan_device::{AppEui, AppKey, DevEui};
-use rand::prelude::*;
 
 // warning: set these appropriately for the region
 const LORAWAN_REGION: region::Region = region::Region::EU868;
@@ -183,9 +182,37 @@ async fn main(spawner: Spawner) -> ! {
     // TODO: Spawn some tasks
     let _ = spawner;
 
+    let mut counter = 0u32;
+
     loop {
-        info!("Hello world!");
-        Timer::after(Duration::from_secs(1)).await;
+        // Prepare message payload
+        let data = b"Hello LoRaWAN";
+        let fport = 2; // Application port
+        let confirmed = false; // Use unconfirmed uplink
+
+        info!("Sending message #{}", counter);
+
+        // Send the message
+        match device.send(data, fport, confirmed).await {
+            Ok(response) => {
+                info!("Message sent successfully: {:?}", response);
+
+                // Check for downlink messages
+                if let Some(downlink) = device.take_downlink() {
+                    info!("Received downlink on port {}, {} bytes",
+                          downlink.fport, downlink.data.len());
+                }
+            }
+            Err(e) => {
+                error!("Failed to send message: {}", e);
+            }
+        }
+
+        counter += 1;
+
+        // Wait 60 seconds before next transmission (respect duty cycle)
+        info!("Waiting 60 seconds before next transmission...");
+        Timer::after(Duration::from_secs(60)).await;
     }
 
     // for inspiration have a look at the examples at https://github.com/esp-rs/esp-hal/tree/esp-hal-v1.0.0/examples/src/bin
