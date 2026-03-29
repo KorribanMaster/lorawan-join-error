@@ -1301,12 +1301,14 @@ checksum = "34080505efa8e45a4b816c349525ebe327ceaa8559756f0356cba97ef3bf7432"
 name = "lora-experiment"
 version = "0.1.0"
 dependencies = [
+ "aes",
  "bt-hci",
  "critical-section",
  "defmt 1.0.1",
  "dotenvy",
  "embassy-embedded-hal",
  "embassy-executor",
+ "embassy-futures",
  "embassy-sync 0.7.2",
  "embassy-time",
  "embedded-io 0.7.1",
@@ -1319,6 +1321,8 @@ dependencies = [
  "esp-radio",
  "esp-rtos",
  "fugit",
+ "heapless 0.8.0",
+ "hex",
  "lora-phy",
  "lorawan-device",
  "rand",
@@ -1919,6 +1923,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b5b5d5992d07744e464b294ccf2dd6d96285bd61c267c4e0307d1f7057a8cd7f"
 dependencies = [
  "bt-hci",
+ "defmt 1.0.1",
  "embassy-futures",
  "embassy-sync 0.7.2",
  "embassy-time",
