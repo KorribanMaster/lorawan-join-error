@@ -28,12 +28,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
-    - name: Install ESP toolchain using espup
-      run: |
-        curl -L https://github.com/esp-rs/espup/releases/latest/download/espup-x86_64-unknown-linux-gnu -o espup
-        chmod a+x espup
-        espup install
-        source $HOME/export-esp.sh
+    - name: Install Rust for Xtensa
+      uses: esp-rs/xtensa-toolchain@v1.5
+      with:
+          default: true
+          version: "latest"
+          ldproxy: true
 
     - name: Build
       run: |
