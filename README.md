@@ -7,7 +7,7 @@ This project implements a gateway that reads Victron Energy device data via Blue
 The codebase is organized into a nested workspace structure that separates hardware-independent and hardware-dependent code:
 
 ```
-lora-experiment/                      # Root workspace (host-testable)
+victron-ttn-gateway/                      # Root workspace (host-testable)
 ├── Cargo.toml                        # Root workspace manifest
 ├── victron-protocol/                 # Hardware-independent protocol library
 │   ├── Cargo.toml
@@ -34,22 +34,6 @@ lora-experiment/                      # Root workspace (host-testable)
     └── src/main.rs
 ```
 
-## Architecture Benefits
-
-This structure provides several advantages:
-
-1. **Host-based Testing**: The `victron-protocol` library can be tested on your development machine using standard `cargo test`, enabling:
-   - Fast test iteration
-   - Use of standard Rust tooling
-   - Property-based testing and fuzzing
-   - ~70% of business logic is testable
-
-2. **Clear Separation**: Hardware-dependent code (ESP32-S3 HAL, BLE, LoRa radio) is isolated in `cross/app`, while protocol logic is in `victron-protocol`
-
-3. **Reusability**: The `victron-protocol` library could be used in other projects (desktop apps, web services, etc.)
-
-4. **Standard Toolchain**: The root workspace uses standard Rust toolchain, only `cross/` requires ESP toolchain
-
 ## Building and Testing
 
 ### Run Host Tests
@@ -59,9 +43,6 @@ From the root directory:
 ```bash
 # Run all tests for victron-protocol
 cargo test -p victron-protocol
-
-# Or use xtask
-cargo xtask test
 ```
 
 ### Build Embedded Application
@@ -71,9 +52,6 @@ From the cross directory:
 ```bash
 cd cross
 cargo build --release --manifest-path app/Cargo.toml
-
-# Or use xtask from root
-cargo xtask build
 ```
 
 ### Flash to Device
@@ -84,7 +62,9 @@ cargo run --release --manifest-path app/Cargo.toml
 ```
 
 ## Hardware Requirements
+- Heltec Lora32 v2
 
+Or 
 - ESP32-S3 development board
 - SX1262 LoRa radio module connected via SPI:
   - NSS: GPIO8
