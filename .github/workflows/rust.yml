@@ -28,6 +28,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
+    - name: Install ESP toolchain using espup
+      run: |
+        curl --proto '=https' --tlsv1.2 -sSf https://sh.espero.dev | sh
+        espup install
+        source $HOME/export-esp.sh
+
+    - name: Build
+      run: |
+        cargo build --verbose
     - name: Build cross workspace
       run: |
         cd cross
