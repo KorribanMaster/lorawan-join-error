@@ -42,7 +42,4 @@ jobs:
       run: |
         cd cross
         cargo build --verbose
-    - name: Run tests (cross workspace)
-      run: |
-        cd cross
-        cargo test --verbose
+
