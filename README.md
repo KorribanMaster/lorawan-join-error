@@ -160,7 +160,7 @@ mod tests {
 
 ## License
 
-This project is for experimental and educational purposes.
+MIT
 
 ## Resources
 
