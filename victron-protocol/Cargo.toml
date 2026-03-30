@@ -1,0 +1,19 @@
+[package]
+name = "victron-protocol"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[features]
+default = []
+defmt = ["dep:defmt"]
+std = ["hex/std"]
+
+[dependencies]
+aes = { version = "0.8", default-features = false }
+heapless = { version = "0.8", default-features = false }
+hex = { version = "0.4", default-features = false, features = ["alloc"], optional = true }
+defmt = { version = "1.0.1", optional = true }
+
+[dev-dependencies]
+hex = { version = "0.4", features = ["std"] }

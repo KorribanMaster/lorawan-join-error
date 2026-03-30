@@ -15,7 +15,7 @@ use embassy_sync::channel::Channel;
 use embassy_time::{Duration, Timer};
 use esp_hal::{clock::CpuClock, timer::timg::TimerGroup};
 use esp_radio::ble::controller::BleConnector;
-use lora_experiment::{device::DeviceData, VictronScanner, VICTRON_MANUFACTURER_ID};
+use lora_experiment::{scanner::VictronScanner, DeviceData, VICTRON_MANUFACTURER_ID};
 
 // Load Victron encryption keys
 include!(concat!(env!("OUT_DIR"), "/victron_keys.rs"));

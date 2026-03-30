@@ -1,0 +1,71 @@
+[package]
+name = "lora-experiment"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[features]
+default = ["defmt"]
+defmt = ["victron-protocol/defmt"]
+
+[[bin]]
+name = "lora-experiment"
+path = "./src/bin/main.rs"
+
+[dependencies]
+# Victron protocol library (hardware-independent)
+victron-protocol = { path = "../../victron-protocol", default-features = false, features = ["defmt"] }
+
+# ESP32-S3 HAL and RTOS
+esp-hal = { version = "1.0.0", features = ["defmt", "esp32s3", "unstable"] }
+esp-rtos = { version = "0.2.0", features = [
+  "defmt",
+  "embassy",
+  "esp-alloc",
+  "esp-radio",
+  "esp32s3",
+] }
+esp-alloc = { version = "0.9.0", features = ["defmt"] }
+esp-backtrace = { version = "0.18.1", features = [
+  "defmt",
+  "esp32s3",
+  "panic-handler",
+] }
+esp-println = { version = "0.16.1", features = ["defmt-espflash", "esp32s3"] }
+esp-bootloader-esp-idf = { version = "0.4.0", features = ["defmt", "esp32s3"] }
+esp-radio = { version = "0.17.0", features = [
+  "ble",
+  "defmt",
+  "esp-alloc",
+  "esp32s3",
+  "unstable",
+] }
+
+# Embassy async runtime
+embassy-executor = { version = "0.9.1", features = ["defmt"] }
+embassy-time = { version = "0.5.0", features = ["defmt"] }
+embassy-futures = "0.1"
+embassy-embedded-hal = { version = "0.5.0", features = ["defmt"] }
+embassy-sync = "0.7.2"
+
+# Embedded I/O
+embedded-io = { version = "0.7.1", features = ["defmt"] }
+embedded-io-async = { version = "0.7.0", features = ["defmt"] }
+
+# BLE
+bt-hci = "0.6.0"
+trouble-host = { version = "0.5.0", features = ["gatt", "scan", "central", "defmt"] }
+
+# LoRaWAN
+lora-phy = { version = "3.0.1", features = ["lorawan-radio"] }
+lorawan-device = { version = "0.12.2", features = ["region-eu868", "default-crypto", "defmt"], default-features = false }
+
+# Utilities
+defmt = "1.0.1"
+critical-section = "1.2.0"
+static_cell = "2.1.1"
+rand = { version = "0.8", default-features = false }
+fugit = "0.3"
+
+[build-dependencies]
+dotenvy = "0.15.7"

@@ -4,43 +4,18 @@ extern crate alloc;
 
 use rand::Rng as _;
 
-// Victron BLE modules
-pub mod bitreader;
-pub mod crypto;
-pub mod device;
-pub mod scanner;
-pub mod types;
-pub mod victron_payload;
+// Re-export victron-protocol for convenience
+pub use victron_protocol::*;
 
 // LoRaWAN module
 pub mod lorawan;
-
-// Re-exports for convenience
-pub use device::DeviceData;
-pub use scanner::VictronScanner;
-pub use types::*;
+// BLE scanner module
+pub mod scanner;
 
 // Victron constants
-pub const VICTRON_MANUFACTURER_ID: u16 = 0x02E1;
 pub const PRODUCT_ADVERTISEMENT_TYPE: u8 = 0x10;
-pub const ENCRYPTION_KEY_SIZE: usize = 16;
 
-// Result and Error types
-pub type Result<T> = core::result::Result<T, Error>;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
-pub enum Error {
-    InvalidKey,
-    DecryptionFailed,
-    InvalidAdvertisement,
-    UnsupportedDevice,
-    InvalidDeviceData,
-    BufferTooSmall,
-    ParseError,
-}
-
-// Generate "jittered" delay for retry attempts up to maximum of 1 hour
+/// Generate "jittered" delay for retry attempts up to maximum of 1 hour
 pub fn generate_delay<R: rand::RngCore>(rng: &mut R, retries: u32) -> u32 {
     let base = core::cmp::min(10 + (10 * retries), 3600);
     let jitter = base / 5;

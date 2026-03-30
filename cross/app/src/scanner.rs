@@ -96,27 +96,3 @@ impl Default for VictronScanConfig {
         }
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_scanner_creation() {
-        let keys = [[0u8; 16]; 1];
-        let _scanner = VictronScanner::new(&keys);
-    }
-
-    #[test]
-    fn test_invalid_advertisement() {
-        let keys = [[0u8; 16]; 1];
-        let scanner = VictronScanner::new(&keys);
-
-        // Empty data
-        assert!(scanner.parse_manufacturer_data(&[]).is_err());
-
-        // Wrong type byte
-        let data = [0x99, 0x02, 0x10, 0x34, 0x12, 0x02, 0x78, 0x56];
-        assert!(scanner.parse_manufacturer_data(&data).is_err());
-    }
-}

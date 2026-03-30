@@ -9,6 +9,9 @@ use crate::{ENCRYPTION_KEY_SIZE, Error, Result};
 use aes::Aes128;
 use aes::cipher::{BlockEncrypt, KeyInit};
 
+// Re-export for convenience
+pub use decrypt_aes_ctr as decrypt;
+
 /// Decrypt Victron advertisement data using AES-CTR
 ///
 /// # Arguments
@@ -72,6 +75,49 @@ pub fn decrypt_aes_ctr(
 
         for i in block_start..block_end {
             output[i] = data_to_decrypt[i] ^ keystream[i - block_start];
+        }
+    }
+
+    Ok(())
+}
+
+/// Helper function for testing: encrypt data using AES-CTR
+/// This is the reverse of decrypt and useful for testing
+pub fn encrypt_for_test(
+    key: &[u8; ENCRYPTION_KEY_SIZE],
+    nonce: u16,
+    plaintext: &[u8],
+    output: &mut [u8],
+) -> Result<()> {
+    if output.len() < plaintext.len() + 1 {
+        return Err(Error::BufferTooSmall);
+    }
+
+    // First byte is the key check
+    output[0] = key[0];
+
+    if plaintext.is_empty() {
+        return Ok(());
+    }
+
+    // Initialize AES cipher
+    let cipher = Aes128::new(key.into());
+
+    // Encrypt using CTR mode
+    let num_blocks = plaintext.len().div_ceil(16);
+
+    for block_idx in 0..num_blocks {
+        let counter_value = (nonce as u128) + (block_idx as u128);
+        let counter_block = counter_value.to_le_bytes();
+
+        let mut keystream = counter_block.into();
+        cipher.encrypt_block(&mut keystream);
+
+        let block_start = block_idx * 16;
+        let block_end = core::cmp::min(block_start + 16, plaintext.len());
+
+        for i in block_start..block_end {
+            output[i + 1] = plaintext[i] ^ keystream[i - block_start];
         }
     }
 
