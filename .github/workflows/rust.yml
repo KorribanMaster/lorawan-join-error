@@ -13,13 +13,26 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build:
-
+  build-root:
+    name: Build (root workspace)
     runs-on: ubuntu-latest
-
     steps:
     - uses: actions/checkout@v4
-    - name: Build
+    - name: Build root workspace
       run: cargo build --verbose
-    - name: Run tests
+    - name: Run tests (root workspace)
       run: cargo test --verbose
+
+  build-cross:
+    name: Build (cross workspace)
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Build cross workspace
+      run: |
+        cd cross
+        cargo build --verbose
+    - name: Run tests (cross workspace)
+      run: |
+        cd cross
+        cargo test --verbose
