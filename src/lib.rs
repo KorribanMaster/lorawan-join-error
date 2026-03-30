@@ -12,6 +12,9 @@ pub mod scanner;
 pub mod types;
 pub mod victron_payload;
 
+// LoRaWAN module
+pub mod lorawan;
+
 // Re-exports for convenience
 pub use device::DeviceData;
 pub use scanner::VictronScanner;
