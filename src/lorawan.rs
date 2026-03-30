@@ -147,57 +147,85 @@ pub async fn lorawan_task(
 
     info!("LoRaWAN network joined!");
 
-    let mut counter = 0u32;
     let mut payload_buffer = [0u8; 51]; // EU868 max payload
+    let mut last_sent_payload: Option<([u8; 51], usize)> = None; // Track last sent data to avoid duplicates
 
     loop {
-        // Try to get latest Victron data from channel (non-blocking)
+        // Drain all available Victron data from channel
         info!("LoRaWAN: Checking channel for Victron data...");
-        let victron_data = victron_channel.try_receive().ok().flatten();
+        let mut messages_sent = 0;
 
-        if victron_data.is_some() {
-            info!("LoRaWAN: Found Victron data in channel");
-        } else {
-            info!("LoRaWAN: No Victron data in channel");
-        }
+        loop {
+            // Try to get Victron data from channel (non-blocking)
+            let victron_data = match victron_channel.try_receive() {
+                Ok(data) => data,
+                Err(_) => {
+                    // Channel is empty
+                    if messages_sent == 0 {
+                        info!("LoRaWAN: No Victron data in channel");
+                    }
+                    break;
+                }
+            };
 
-        let (data, fport) = if let Some(device_data) = victron_data {
+            if victron_data.is_none() {
+                // Received None, skip this entry
+                continue;
+            }
+
+            let device_data = victron_data.unwrap();
+
             // Pack Victron data into binary format
             let len = victron_payload::pack_device_data(&device_data, &mut payload_buffer);
 
-            if len > 0 {
-                info!("Sending Victron data: {} bytes", len);
-                (&payload_buffer[..len], 2) // Port 2 for Victron data
-            } else {
+            if len == 0 {
                 // Fallback if packing failed
-                warn!("Failed to pack Victron data, sending test message");
-                (b"Hello LoRaWAN" as &[u8], 2)
+                warn!("Failed to pack Victron data, skipping this message");
+                continue;
             }
-        } else {
-            // No Victron data available, send test message
-            info!("No Victron data available, sending test message #{}", counter);
-            (b"Hello LoRaWAN" as &[u8], 2)
-        };
 
-        let confirmed = false; // Use unconfirmed uplink
+            // Check if this payload is a duplicate of the last sent one
+            let is_duplicate = if let Some((last_payload, last_len)) = &last_sent_payload {
+                len == *last_len && &payload_buffer[..len] == &last_payload[..*last_len]
+            } else {
+                false
+            };
 
-        // Send the message
-        match device.send(data, fport, confirmed).await {
-            Ok(response) => {
-                info!("Message sent successfully: {:?}", response);
+            if is_duplicate {
+                info!("Skipping duplicate data ({} bytes)", len);
+                continue;
+            }
 
-                // Check for downlink messages
-                if let Some(downlink) = device.take_downlink() {
-                    info!("Received downlink on port {}, {} bytes",
-                          downlink.fport, downlink.data.len());
+            info!("Sending Victron data: {} bytes", len);
+            let data = &payload_buffer[..len];
+            let fport = 2; // Port 2 for Victron data
+            let confirmed = false; // Use unconfirmed uplink
+
+            // Send the message
+            match device.send(data, fport, confirmed).await {
+                Ok(response) => {
+                    info!("Message sent successfully: {:?}", response);
+                    messages_sent += 1;
+
+                    // Update last sent payload to track duplicates
+                    last_sent_payload = Some((payload_buffer, len));
+
+                    // Check for downlink messages
+                    if let Some(downlink) = device.take_downlink() {
+                        info!("Received downlink on port {}, {} bytes",
+                              downlink.fport, downlink.data.len());
+                    }
                 }
-            }
-            Err(e) => {
-                error!("Failed to send message: {}", e);
+                Err(e) => {
+                    error!("Failed to send message: {}", e);
+                }
             }
         }
 
-        counter += 1;
+        // Report on messages sent
+        if messages_sent > 0 {
+            info!("Sent {} message(s) from channel", messages_sent);
+        }
 
         // Wait 60 seconds before next transmission (respect duty cycle)
         info!("Waiting 60 seconds before next transmission...");

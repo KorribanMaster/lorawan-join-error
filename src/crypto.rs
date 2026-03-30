@@ -7,7 +7,6 @@
 
 use crate::{ENCRYPTION_KEY_SIZE, Error, Result};
 use aes::Aes128;
-use aes::cipher::generic_array::GenericArray;
 use aes::cipher::{BlockEncrypt, KeyInit};
 
 /// Decrypt Victron advertisement data using AES-CTR
@@ -52,7 +51,7 @@ pub fn decrypt_aes_ctr(
     }
 
     // Initialize AES cipher
-    let cipher = Aes128::new(GenericArray::from_slice(key));
+    let cipher = Aes128::new(key.into());
 
     // CTR mode: we encrypt the counter values and XOR with ciphertext
     let num_blocks = data_to_decrypt.len().div_ceil(16);
@@ -61,11 +60,10 @@ pub fn decrypt_aes_ctr(
         // Create counter block: 128-bit value starting at nonce
         // Counter = nonce + block_idx, in little-endian
         let counter_value = (nonce as u128) + (block_idx as u128);
-        let mut counter_block = [0u8; 16];
-        counter_block[..16].copy_from_slice(&counter_value.to_le_bytes());
+        let counter_block = counter_value.to_le_bytes();
 
         // Encrypt the counter block to get keystream
-        let mut keystream = GenericArray::clone_from_slice(&counter_block);
+        let mut keystream = counter_block.into();
         cipher.encrypt_block(&mut keystream);
 
         // XOR with encrypted data to get plaintext

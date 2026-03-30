@@ -45,9 +45,7 @@ impl EventHandler for VictronEventHandler {
     fn on_adv_reports(&self, mut it: LeAdvReportsIter<'_>) {
         let scanner = VictronScanner::new(&ENCRYPTION_KEYS);
 
-        let mut adv_count = 0;
         while let Some(Ok(report)) = it.next() {
-            adv_count += 1;
             // Get raw advertisement data
             let adv_data = report.data;
 
@@ -224,10 +222,6 @@ impl EventHandler for VictronEventHandler {
 
                 i += 1 + length;
             }
-        }
-
-        if adv_count > 0 {
-            info!("Received {} advertisements in this batch", adv_count);
         }
     }
 }
