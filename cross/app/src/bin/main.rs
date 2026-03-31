@@ -11,11 +11,13 @@ use defmt::{info, warn};
 use embassy_executor::Spawner;
 use embassy_futures::join::join;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
-use embassy_sync::channel::Channel;
-use embassy_time::{Duration, Timer};
+use embassy_sync::mutex::Mutex;
+use embassy_time::{Duration, Instant, Timer};
 use esp_hal::{clock::CpuClock, timer::timg::TimerGroup};
 use esp_radio::ble::controller::BleConnector;
-use lora_experiment::{scanner::VictronScanner, DeviceData, VICTRON_MANUFACTURER_ID};
+use lora_experiment::{
+    scanner::VictronScanner, VictronDeviceStorage, DeviceData, VICTRON_MANUFACTURER_ID,
+};
 
 // Load Victron encryption keys
 include!(concat!(env!("OUT_DIR"), "/victron_keys.rs"));
@@ -29,8 +31,8 @@ extern crate alloc;
 const CONNECTIONS_MAX: usize = 1;
 const L2CAP_CHANNELS_MAX: usize = 1;
 
-// Channel for sharing Victron device data between BLE scanner and LoRaWAN sender
-static VICTRON_DATA_CHANNEL: StaticCell<Channel<CriticalSectionRawMutex, Option<DeviceData>, 10>> = StaticCell::new();
+// Static storage for tracking up to 10 Victron devices
+static DEVICE_STORAGE: StaticCell<Mutex<CriticalSectionRawMutex, VictronDeviceStorage>> = StaticCell::new();
 
 // This creates a default app-descriptor required by the esp-idf bootloader.
 // For more information see: <https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/system/app_image_format.html#application-description>
@@ -38,7 +40,7 @@ esp_bootloader_esp_idf::esp_app_desc!();
 
 /// Event handler for BLE advertisements - processes Victron device data
 struct VictronEventHandler {
-    channel: &'static Channel<CriticalSectionRawMutex, Option<DeviceData>, 10>,
+    storage: &'static Mutex<CriticalSectionRawMutex, VictronDeviceStorage>,
 }
 
 impl EventHandler for VictronEventHandler {
@@ -74,9 +76,44 @@ impl EventHandler for VictronEventHandler {
                             u16::from_le_bytes([manufacturer_data[0], manufacturer_data[1]]);
 
                         if company_id == VICTRON_MANUFACTURER_ID {
+                            // Create a hash of the BLE address for device identification
+                            // Since we can't access BdAddr internals, use a simple hash
+                            let addr_hash = {
+                                // Use format string representation to generate a stable hash
+                                use core::hash::{Hash, Hasher};
+                                struct SimpleHasher(u32);
+                                impl Hasher for SimpleHasher {
+                                    fn finish(&self) -> u64 {
+                                        self.0 as u64
+                                    }
+                                    fn write(&mut self, bytes: &[u8]) {
+                                        for &b in bytes {
+                                            self.0 = self.0.wrapping_mul(31).wrapping_add(b as u32);
+                                        }
+                                    }
+                                }
+                                let mut hasher = SimpleHasher(0);
+                                // Hash the address representation
+                                report.addr.hash(&mut hasher);
+                                hasher.finish() as u32
+                            };
+
+                            // Create a pseudo-MAC address from the hash (for LoRaWAN transmission)
+                            let mac_address = [
+                                (addr_hash >> 24) as u8,
+                                (addr_hash >> 16) as u8,
+                                (addr_hash >> 8) as u8,
+                                addr_hash as u8,
+                                0xFF, // Marker bytes to indicate this is derived
+                                0xFE,
+                            ];
+
+                            // Extract RSSI
+                            let rssi = report.rssi;
+
                             info!(
-                                "Found Victron device: {:x}, RSSI: {} dBm, trying to send to channel",
-                                report.addr, report.rssi
+                                "Found Victron device: {:x}, RSSI: {} dBm, updating storage",
+                                report.addr, rssi
                             );
 
                             // Parse manufacturer data (skip company ID)
@@ -200,13 +237,21 @@ impl EventHandler for VictronEventHandler {
                                         }
                                     }
 
-                                    // Send to channel (non-blocking, overwrites old data)
-                                    match self.channel.try_send(Some(device_data)) {
-                                        Ok(_) => {
-                                            info!("Successfully sent data to channel");
+                                    // Update device storage with MAC, RSSI, and data
+                                    let timestamp = Instant::now().as_millis();
+                                    match self.storage.try_lock() {
+                                        Ok(mut storage) => {
+                                            storage.update_device(
+                                                mac_address,
+                                                rssi,
+                                                device_data,
+                                                timestamp,
+                                                addr_hash,
+                                            );
+                                            info!("Successfully updated device storage (hash: {:08x})", addr_hash);
                                         }
-                                        Err(e) => {
-                                            warn!("Failed to send to channel: {:?}", e);
+                                        Err(_) => {
+                                            warn!("Failed to lock device storage");
                                         }
                                     }
                                 }
@@ -240,8 +285,8 @@ async fn main(spawner: Spawner) -> ! {
 
     info!("Embassy initialized!");
 
-    // Initialize Victron data channel
-    let victron_channel = VICTRON_DATA_CHANNEL.init(Channel::new());
+    // Initialize Victron device storage
+    let device_storage = DEVICE_STORAGE.init(Mutex::new(VictronDeviceStorage::new()));
 
     // let radio_init = esp_radio::init().expect("Failed to initialize Wi-Fi/BLE controller");
     // // find more examples https://github.com/embassy-rs/trouble/tree/main/examples/esp32
@@ -280,13 +325,13 @@ async fn main(spawner: Spawner) -> ! {
     info!("Bluetooth initialized with scanning support");
 
     // Spawn LoRaWAN task
-    spawner.spawn(lora_experiment::lorawan::lorawan_task(victron_channel)).unwrap();
+    spawner.spawn(lora_experiment::lorawan::lorawan_task(device_storage)).unwrap();
     info!("LoRaWAN task spawned");
 
     // Run BLE using join pattern (keeps everything in main's stack frame)
     // Create event handler for processing advertisements
     let handler = VictronEventHandler {
-        channel: victron_channel,
+        storage: device_storage,
     };
     let mut scanner = Scanner::new(central);
 

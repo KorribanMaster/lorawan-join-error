@@ -36,29 +36,38 @@ victron-ttn-gateway/                      # Root workspace (host-testable)
 
 ## Building and Testing
 
-### Run Host Tests
+This project uses the `xtask` pattern for build orchestration. All commands can be run from the root directory without needing to change directories.
 
-From the root directory:
+### Available Commands
 
 ```bash
-# Run all tests for victron-protocol
-cargo test -p victron-protocol
+# Run host tests only
+cargo xtask test host
+
+# Run all tests (host + embedded build verification)
+cargo xtask test all
+
+# Build embedded application (debug)
+cargo xtask build
+
+# Build embedded application (release)
+cargo xtask build --release
+
+# Flash to device (debug)
+cargo xtask flash
+
+# Flash to device (release)
+cargo xtask flash --release
 ```
 
-### Build Embedded Application
-
-From the cross directory:
+### Quick Start
 
 ```bash
-cd cross
-cargo build --release --manifest-path app/Cargo.toml
-```
+# Test the protocol library
+cargo xtask test host
 
-### Flash to Device
-
-```bash
-cd cross
-cargo run --release --manifest-path app/Cargo.toml
+# Build and flash the release version to your device
+cargo xtask flash --release
 ```
 
 ## Hardware Requirements

@@ -4,7 +4,6 @@
 
 use defmt::{error, info, warn};
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
-use embassy_sync::channel::Channel;
 use embassy_sync::mutex::Mutex;
 use embassy_time::{Delay, Duration, Timer};
 use esp_hal::gpio::{Input, InputConfig, Level, Output, OutputConfig};
@@ -25,7 +24,7 @@ use lorawan_device::default_crypto::DefaultFactory as Crypto;
 use lorawan_device::{AppEui, AppKey, DevEui};
 use static_cell::StaticCell;
 
-use crate::{device::DeviceData, victron_payload, generate_delay, SimpleTimer};
+use crate::{victron_payload, generate_delay, SimpleTimer, VictronDeviceStorage};
 
 // LoRaWAN configuration constants
 const LORAWAN_REGION: region::Region = region::Region::EU868;
@@ -48,7 +47,7 @@ static SPI_BUS: StaticCell<
 /// LoRaWAN task - handles network joining and data transmission
 #[embassy_executor::task]
 pub async fn lorawan_task(
-    victron_channel: &'static Channel<CriticalSectionRawMutex, Option<DeviceData>, 10>,
+    device_storage: &'static Mutex<CriticalSectionRawMutex, VictronDeviceStorage>,
 ) {
     info!("LoRaWAN task starting...");
 
@@ -148,83 +147,70 @@ pub async fn lorawan_task(
     info!("LoRaWAN network joined!");
 
     let mut payload_buffer = [0u8; 51]; // EU868 max payload
-    let mut last_sent_payload: Option<([u8; 51], usize)> = None; // Track last sent data to avoid duplicates
 
     loop {
-        // Drain all available Victron data from channel
-        info!("LoRaWAN: Checking channel for Victron data...");
-        let mut messages_sent = 0;
+        // Get next device from storage (round-robin)
+        info!("LoRaWAN: Getting next device from storage...");
 
-        loop {
-            // Try to get Victron data from channel (non-blocking)
-            let victron_data = match victron_channel.try_receive() {
-                Ok(data) => data,
-                Err(_) => {
-                    // Channel is empty
-                    if messages_sent == 0 {
-                        info!("LoRaWAN: No Victron data in channel");
-                    }
-                    break;
-                }
-            };
-
-            if victron_data.is_none() {
-                // Received None, skip this entry
-                continue;
+        // Pack device data while holding the lock (DeviceData isn't Copy)
+        let packed_result = {
+            let mut storage = device_storage.lock().await;
+            if let Some(entry) = storage.get_next_valid_device() {
+                let mac = entry.mac_address;
+                let rssi = entry.rssi;
+                let len = victron_payload::pack_device_with_metadata(
+                    &mac,
+                    rssi,
+                    &entry.data,
+                    &mut payload_buffer,
+                );
+                Some((mac, rssi, len))
+            } else {
+                None
             }
+        };
 
-            let device_data = victron_data.unwrap();
-
-            // Pack Victron data into binary format
-            let len = victron_payload::pack_device_data(&device_data, &mut payload_buffer);
+        if let Some((mac, rssi, len)) = packed_result {
+            info!(
+                "Sending device: MAC={:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}, RSSI={}",
+                mac[0],
+                mac[1],
+                mac[2],
+                mac[3],
+                mac[4],
+                mac[5],
+                rssi
+            );
 
             if len == 0 {
-                // Fallback if packing failed
-                warn!("Failed to pack Victron data, skipping this message");
-                continue;
-            }
-
-            // Check if this payload is a duplicate of the last sent one
-            let is_duplicate = if let Some((last_payload, last_len)) = &last_sent_payload {
-                len == *last_len && &payload_buffer[..len] == &last_payload[..*last_len]
+                warn!("Failed to pack device data");
             } else {
-                false
-            };
+                info!("Sending Victron data: {} bytes (MAC:6 + RSSI:1 + Type:1 + Data:{})", len, len - 8);
+                let data = &payload_buffer[..len];
+                let fport = 2; // Port 2 for Victron data
+                let confirmed = false; // Use unconfirmed uplink
 
-            if is_duplicate {
-                info!("Skipping duplicate data ({} bytes)", len);
-                continue;
-            }
+                // Send the message
+                match device.send(data, fport, confirmed).await {
+                    Ok(response) => {
+                        info!("Message sent successfully: {:?}", response);
 
-            info!("Sending Victron data: {} bytes", len);
-            let data = &payload_buffer[..len];
-            let fport = 2; // Port 2 for Victron data
-            let confirmed = false; // Use unconfirmed uplink
-
-            // Send the message
-            match device.send(data, fport, confirmed).await {
-                Ok(response) => {
-                    info!("Message sent successfully: {:?}", response);
-                    messages_sent += 1;
-
-                    // Update last sent payload to track duplicates
-                    last_sent_payload = Some((payload_buffer, len));
-
-                    // Check for downlink messages
-                    if let Some(downlink) = device.take_downlink() {
-                        info!("Received downlink on port {}, {} bytes",
-                              downlink.fport, downlink.data.len());
+                        // Check for downlink messages
+                        if let Some(downlink) = device.take_downlink() {
+                            info!(
+                                "Received downlink on port {}, {} bytes",
+                                downlink.fport,
+                                downlink.data.len()
+                            );
+                        }
+                    }
+                    Err(e) => {
+                        error!("Failed to send message: {}", e);
                     }
                 }
-                Err(e) => {
-                    error!("Failed to send message: {}", e);
-                }
             }
-        }
-
-        // Report on messages sent
-        if messages_sent > 0 {
-            info!("Sent {} message(s) from channel", messages_sent);
+        } else {
+            info!("LoRaWAN: No valid devices in storage");
         }
 
         // Wait 60 seconds before next transmission (respect duty cycle)

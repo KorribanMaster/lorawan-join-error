@@ -172,6 +172,41 @@ pub fn pack_device_data(device_data: &DeviceData, output: &mut [u8]) -> usize {
     }
 }
 
+/// Pack Victron device data with MAC address and RSSI metadata
+///
+/// Format:
+/// - Bytes 0-5: MAC address (6 bytes)
+/// - Byte 6: RSSI (signed 8-bit)
+/// - Byte 7: Device type ID
+/// - Bytes 8-N: Device-specific data (packed efficiently)
+///
+/// Returns the number of bytes written to the output buffer
+pub fn pack_device_with_metadata(
+    mac_address: &[u8; 6],
+    rssi: i8,
+    device_data: &DeviceData,
+    output: &mut [u8],
+) -> usize {
+    if output.len() < 8 {
+        return 0;
+    }
+
+    // Pack MAC address (6 bytes)
+    output[0..6].copy_from_slice(mac_address);
+
+    // Pack RSSI (1 signed byte)
+    output[6] = rssi as u8;
+
+    // Pack device data starting at offset 7
+    let device_bytes_written = pack_device_data(device_data, &mut output[7..]);
+
+    if device_bytes_written == 0 {
+        return 0;
+    }
+
+    7 + device_bytes_written
+}
+
 /// Unpack Victron device data from binary payload (for testing/verification)
 ///
 /// This is mainly useful for debugging and verifying the packing format

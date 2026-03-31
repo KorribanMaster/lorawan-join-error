@@ -43,8 +43,8 @@ fn print_help() {
 /// Build the embedded application in debug mode
 fn build() -> Result<(), anyhow::Error> {
     println!("Building embedded application (debug)...");
-    let cross_dir = root_dir().join("cross");
-    cmd!("cargo -C {cross_dir} build --manifest-path app/Cargo.toml").run()?;
+    let _p = xshell::pushd(root_dir().join("cross").join("app"))?;
+    cmd!("cargo +esp build").run()?;
     println!("Build complete!");
     Ok(())
 }
@@ -52,8 +52,8 @@ fn build() -> Result<(), anyhow::Error> {
 /// Build the embedded application in release mode
 fn build_release() -> Result<(), anyhow::Error> {
     println!("Building embedded application (release)...");
-    let cross_dir = root_dir().join("cross");
-    cmd!("cargo -C {cross_dir} build --manifest-path app/Cargo.toml --release").run()?;
+    let _p = xshell::pushd(root_dir().join("cross").join("app"))?;
+    cmd!("cargo +esp build --release").run()?;
     println!("Build complete!");
     Ok(())
 }
@@ -61,16 +61,16 @@ fn build_release() -> Result<(), anyhow::Error> {
 /// Flash the embedded application to device (debug)
 fn flash() -> Result<(), anyhow::Error> {
     println!("Flashing embedded application (debug)...");
-    let cross_dir = root_dir().join("cross");
-    cmd!("cargo -C {cross_dir} run --manifest-path app/Cargo.toml").run()?;
+    let _p = xshell::pushd(root_dir().join("cross").join("app"))?;
+    cmd!("cargo +esp run").run()?;
     Ok(())
 }
 
 /// Flash the embedded application to device (release)
 fn flash_release() -> Result<(), anyhow::Error> {
     println!("Flashing embedded application (release)...");
-    let cross_dir = root_dir().join("cross");
-    cmd!("cargo -C {cross_dir} run --manifest-path app/Cargo.toml --release").run()?;
+    let _p = xshell::pushd(root_dir().join("cross").join("app"))?;
+    cmd!("cargo +esp run --release").run()?;
     Ok(())
 }
 
@@ -88,8 +88,8 @@ fn test_all() -> Result<(), anyhow::Error> {
 /// Run host tests for victron-protocol
 fn test_host() -> Result<(), anyhow::Error> {
     println!("Running host tests for victron-protocol...");
-    let workspace_root = root_dir();
-    cmd!("cargo -C {workspace_root} test -p victron-protocol").run()?;
+    let _p = xshell::pushd(root_dir())?;
+    cmd!("cargo test -p victron-protocol").run()?;
     println!("All host tests passed!");
     Ok(())
 }
