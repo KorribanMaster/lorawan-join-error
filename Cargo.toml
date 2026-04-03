@@ -1,6 +1,6 @@
 [workspace]
 members = ["victron-ble", "xtask"]
-exclude = ["cross"]
+exclude = ["cross", "monitoring"]
 resolver = "2"
 
 [workspace.package]

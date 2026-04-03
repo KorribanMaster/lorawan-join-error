@@ -1,0 +1,77 @@
+services:
+  influxdb:
+    image: influxdb:2.7
+    container_name: victron-influxdb
+    restart: unless-stopped
+    ports:
+      - "8086:8086"
+    volumes:
+      - influxdb-data:/var/lib/influxdb2
+      - influxdb-config:/etc/influxdb2
+    environment:
+      - DOCKER_INFLUXDB_INIT_MODE=setup
+      - DOCKER_INFLUXDB_INIT_USERNAME=admin
+      - DOCKER_INFLUXDB_INIT_PASSWORD=${INFLUXDB_ADMIN_PASSWORD:-changeme}
+      - DOCKER_INFLUXDB_INIT_ORG=victron-monitoring
+      - DOCKER_INFLUXDB_INIT_BUCKET=victron-data
+      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=${INFLUXDB_TOKEN}
+    healthcheck:
+      test: ["CMD", "influx", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - victron-net
+
+  grafana:
+    image: grafana/grafana:10.4.1
+    container_name: victron-grafana
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning
+      - ./grafana/dashboards:/var/lib/grafana/dashboards
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
+      - GF_INSTALL_PLUGINS=
+      - GF_SERVER_ROOT_URL=http://localhost:3000
+      - GF_AUTH_ANONYMOUS_ENABLED=false
+      - INFLUXDB_TOKEN=${INFLUXDB_TOKEN}
+    depends_on:
+      influxdb:
+        condition: service_healthy
+    networks:
+      - victron-net
+
+  ttn-ingest:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: victron-ttn-ingest
+    restart: unless-stopped
+    environment:
+      - TTN_APP_ID=${TTN_APP_ID:-vanman}
+      - TTN_API_KEY=${TTN_API_KEY}
+      - TTN_REGION=${TTN_REGION:-eu1}
+      - INFLUXDB_URL=http://influxdb:8086
+      - INFLUXDB_TOKEN=${INFLUXDB_TOKEN}
+      - INFLUXDB_ORG=victron-monitoring
+      - INFLUXDB_BUCKET=victron-data
+      - RUST_LOG=${RUST_LOG:-info}
+    depends_on:
+      influxdb:
+        condition: service_healthy
+    networks:
+      - victron-net
+
+volumes:
+  influxdb-data:
+  influxdb-config:
+  grafana-data:
+
+networks:
+  victron-net:
+    driver: bridge
