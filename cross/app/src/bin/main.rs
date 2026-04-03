@@ -16,6 +16,7 @@ use embassy_time::{Duration, Instant, Timer};
 use esp_hal::{clock::CpuClock, timer::timg::TimerGroup};
 use esp_radio::ble::controller::BleConnector;
 use lora_experiment::{
+    battery::BatteryMonitor,
     scanner::VictronScanner, VictronDeviceStorage, DeviceData, VICTRON_MANUFACTURER_ID,
 };
 
@@ -288,6 +289,10 @@ async fn main(spawner: Spawner) -> ! {
     // Initialize Victron device storage
     let device_storage = DEVICE_STORAGE.init(Mutex::new(VictronDeviceStorage::new()));
 
+    // Initialize battery monitor
+    let mut battery_monitor = BatteryMonitor::new(peripherals.ADC1, peripherals.GPIO1, peripherals.GPIO37);
+    info!("Battery monitor initialized");
+
     // let radio_init = esp_radio::init().expect("Failed to initialize Wi-Fi/BLE controller");
     // // find more examples https://github.com/embassy-rs/trouble/tree/main/examples/esp32
     // let transport = BleConnector::new(&radio_init, peripherals.BT, Default::default()).unwrap();
@@ -351,6 +356,14 @@ async fn main(spawner: Spawner) -> ! {
         runner.run_with_handler(&handler),
         async {
             loop {
+                // Read and display battery voltage
+                let battery_mv = battery_monitor.read_voltage_mv();
+                info!("Battery voltage: {}.{:02}V ({} mV)",
+                    battery_mv / 1000,
+                    (battery_mv % 1000) / 10,
+                    battery_mv
+                );
+
                 info!("Starting BLE scan session...");
                 match scanner.scan(&scan_config).await {
                     Ok(session) => {

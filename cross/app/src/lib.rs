@@ -11,6 +11,8 @@ pub use victron_protocol::*;
 pub mod lorawan;
 // BLE scanner module
 pub mod scanner;
+// Battery monitoring module
+pub mod battery;
 
 // Victron constants
 pub const PRODUCT_ADVERTISEMENT_TYPE: u8 = 0x10;

@@ -1369,6 +1369,7 @@ dependencies = [
  "fugit",
  "lora-phy",
  "lorawan-device",
+ "nb 1.1.0",
  "rand",
  "static_cell",
  "trouble-host",
