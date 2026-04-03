@@ -13,6 +13,8 @@ pub mod lorawan;
 pub mod scanner;
 // Battery monitoring module
 pub mod battery;
+// OLED display module
+pub mod display;
 
 // Victron constants
 pub const PRODUCT_ADVERTISEMENT_TYPE: u8 = 0x10;

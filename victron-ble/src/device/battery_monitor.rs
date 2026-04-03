@@ -58,19 +58,28 @@ impl Device for BatteryMonitorData {
             Some(ttg_raw)
         };
 
-        // Read voltage (16 bits, 0.01V resolution)
-        let voltage_raw = reader.read_u16(16)?;
-        let voltage = (voltage_raw as f32) * 0.01;
+        // Read voltage (16 bits, 0.01V resolution, signed)
+        // Range: -327.68..327.66 V, NA: 0x7FFF
+        let voltage_raw = reader.read_i16(16)?;
+        let voltage = if voltage_raw == 0x7FFF {
+            0.0 // NA value
+        } else {
+            (voltage_raw as f32) * 0.01
+        };
 
-        // Read alarm (2 bits)
-        let alarm_raw = reader.read_u8(2)?;
-        let alarm = AlarmNotification::from_u8(alarm_raw).unwrap_or(AlarmNotification::Off);
+        // Read alarm reason (16 bits) - per PDF page 3
+        let alarm_reason = reader.read_u16(16)?;
+        let alarm = if alarm_reason != 0 {
+            AlarmNotification::Alarm
+        } else {
+            AlarmNotification::Off
+        };
 
-        // Read auxiliary input mode (2 bits)
-        let aux_mode = reader.read_u8(2)?;
-
-        // Read auxiliary input value (16 bits)
+        // Read auxiliary input value (16 bits) - BEFORE aux mode per PDF
         let aux_value_raw = reader.read_u16(16)?;
+
+        // Read auxiliary input mode (2 bits) - AFTER aux value per PDF
+        let aux_mode = reader.read_u8(2)?;
         let aux_input = match aux_mode {
             0 => {
                 // Starter voltage: 0.01V resolution
@@ -109,8 +118,13 @@ impl Device for BatteryMonitorData {
         let current = (current_raw as f32) * 0.001;
 
         // Read consumed Ah (20 bits, 0.1Ah resolution)
+        // Per PDF: "Consumed Ah = -Record value"
         let consumed_raw = reader.read_u32(20)?;
-        let consumed_ah = (consumed_raw as f32) * 0.1;
+        let consumed_ah = if consumed_raw == 0xFFFFF {
+            0.0 // NA value
+        } else {
+            -((consumed_raw as f32) * 0.1) // Negate per spec
+        };
 
         // Read state of charge (10 bits, 0.1% resolution)
         let soc_raw = reader.read_u16(10)?;

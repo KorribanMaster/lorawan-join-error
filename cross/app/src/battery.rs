@@ -92,16 +92,12 @@ where
     /// Read the current battery voltage
     ///
     /// Returns voltage in volts (e.g., 3.7 for a nominal LiPo battery)
-    pub fn read_voltage(&mut self) -> f32 {
+    pub async fn read_voltage(&mut self) -> f32 {
         // Enable voltage divider by setting control pin HIGH
-        self.ctrl_pin.set_high();
+        self.ctrl_pin.set_low();
 
-        // Small delay to stabilize the voltage divider
-        // Note: This is a blocking delay, but very short (5ms)
-        for _ in 0..50_000 {
-            core::hint::spin_loop();
-        }
 
+        embassy_time::Timer::after(embassy_time::Duration::from_millis(100)).await;
         // Read ADC value using oneshot mode
         let voltage = match nb::block!(self.adc.read_oneshot(&mut self.adc_pin)) {
             Ok(reading) => {
@@ -115,7 +111,7 @@ where
         };
 
         // Disable voltage divider to save power
-        self.ctrl_pin.set_low();
+        self.ctrl_pin.set_high();
 
         voltage
     }
@@ -123,8 +119,8 @@ where
     /// Check if battery is critically low
     ///
     /// Returns true if voltage is below the critical threshold (3.3V)
-    pub fn is_critical(&mut self) -> bool {
-        let voltage = self.read_voltage();
+    pub async fn is_critical(&mut self) -> bool {
+        let voltage = self.read_voltage().await;
         voltage > 0.0 && voltage < CRITICAL_BATTERY_VOLTAGE
     }
 
@@ -132,15 +128,15 @@ where
     ///
     /// Returns true if voltage is above recovery threshold (3.4V)
     /// This provides hysteresis to prevent bouncing between states
-    pub fn has_recovered(&mut self) -> bool {
-        let voltage = self.read_voltage();
+    pub async fn has_recovered(&mut self) -> bool {
+        let voltage = self.read_voltage().await;
         voltage >= BATTERY_RECOVERY_VOLTAGE
     }
 
     /// Read battery voltage in millivolts
     ///
     /// Convenience method for protocol encoding
-    pub fn read_voltage_mv(&mut self) -> u16 {
-        (self.read_voltage() * 1000.0) as u16
+    pub async fn read_voltage_mv(&mut self) -> u16 {
+        (self.read_voltage().await * 1000.0) as u16
     }
 }

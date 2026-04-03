@@ -77,8 +77,11 @@ pub fn decrypt_aes_ctr(
             output[i] = data_to_decrypt[i] ^ keystream[i - block_start];
         }
     }
+    
+    #[cfg(feature = "defmt")]
+    defmt::info!("Decrypted data {}", output);
 
-    Ok(())
+   Ok(())
 }
 
 /// Helper function for testing: encrypt data using AES-CTR

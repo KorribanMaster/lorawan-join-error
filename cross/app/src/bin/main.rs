@@ -13,7 +13,7 @@ use embassy_futures::join::join;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::mutex::Mutex;
 use embassy_time::{Duration, Instant, Timer};
-use esp_hal::{clock::CpuClock, timer::timg::TimerGroup};
+use esp_hal::{clock::CpuClock, time::Rate, timer::timg::TimerGroup};
 use esp_radio::ble::controller::BleConnector;
 use lora_experiment::{
     battery::BatteryMonitor,
@@ -34,6 +34,10 @@ const L2CAP_CHANNELS_MAX: usize = 1;
 
 // Static storage for tracking up to 10 Victron devices
 static DEVICE_STORAGE: StaticCell<Mutex<CriticalSectionRawMutex, VictronDeviceStorage>> = StaticCell::new();
+
+// Static storage for battery monitor
+type BatteryMonitorType = BatteryMonitor<'static, esp_hal::peripherals::GPIO1<'static>>;
+static BATTERY_MONITOR: StaticCell<Mutex<CriticalSectionRawMutex, BatteryMonitorType>> = StaticCell::new();
 
 // This creates a default app-descriptor required by the esp-idf bootloader.
 // For more information see: <https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/system/app_image_format.html#application-description>
@@ -290,23 +294,58 @@ async fn main(spawner: Spawner) -> ! {
     let device_storage = DEVICE_STORAGE.init(Mutex::new(VictronDeviceStorage::new()));
 
     // Initialize battery monitor
-    let mut battery_monitor = BatteryMonitor::new(peripherals.ADC1, peripherals.GPIO1, peripherals.GPIO37);
+    let battery_monitor_inst = BatteryMonitor::new(peripherals.ADC1, peripherals.GPIO1, peripherals.GPIO37);
+    let battery_monitor = BATTERY_MONITOR.init(Mutex::new(battery_monitor_inst));
     info!("Battery monitor initialized");
 
-    // let radio_init = esp_radio::init().expect("Failed to initialize Wi-Fi/BLE controller");
-    // // find more examples https://github.com/embassy-rs/trouble/tree/main/examples/esp32
-    // let transport = BleConnector::new(&radio_init, peripherals.BT, Default::default()).unwrap();
-    // let ble_controller = ExternalController::<_, 20>::new(transport);
+    // Initialize OLED display hardware control pins
+    info!("Setting up OLED display hardware control...");
 
-    // let resources = HOST_RESOURCES.init(HostResources::new());
-    //
-    // // Create scanner address for BLE
-    // let address: Address = Address::random([0xff, 0x8f, 0x1b, 0x05, 0xe4, 0xff]);
-    // let stack = trouble_host::new(ble_controller, resources)
-    //     .set_random_address(address);
-    // let Host {
-    //     central, mut runner, ..
-    // } = stack.build();
+    // GPIO36: Power control (LOW = power enabled)
+    info!("  GPIO36: Power control (setting LOW to enable power)");
+    let mut oled_power = esp_hal::gpio::Output::new(
+        peripherals.GPIO36,
+        esp_hal::gpio::Level::Low,
+        esp_hal::gpio::OutputConfig::default(),
+    );
+    oled_power.set_low();
+
+ 
+    // GPIO21: Reset control (LOW = not in reset, i.e., normal operation)
+ 
+    info!("  GPIO21: Reset control (setting HIGH for normal operation)");
+    let mut oled_reset = esp_hal::gpio::Output::new(
+        peripherals.GPIO21,
+        esp_hal::gpio::Level::Low,
+        esp_hal::gpio::OutputConfig::default(),
+    );
+
+    embassy_time::Timer::after(embassy_time::Duration::from_millis(10)).await;
+    oled_reset.set_high();
+    // Give the display time to power up and stabilize
+    info!("  Waiting for display to power up...");
+    embassy_time::Timer::after(embassy_time::Duration::from_millis(100)).await;
+    info!("OLED display powered and ready");
+
+    // Initialize I2C for OLED display (GPIO17=SDA, GPIO18=SCL)
+    info!("Initializing I2C bus for OLED display...");
+    info!("  I2C0 peripheral");
+
+    // Try 100 kHz first for better reliability (change to 400 if needed)
+    let i2c_freq_khz = 100;
+    info!("  Frequency: {} kHz (using conservative speed for reliability)", i2c_freq_khz);
+    info!("  SDA: GPIO17");
+    info!("  SCL: GPIO18");
+
+    let i2c = esp_hal::i2c::master::I2c::new(
+        peripherals.I2C0,
+        esp_hal::i2c::master::Config::default().with_frequency(Rate::from_khz(i2c_freq_khz)),
+    )
+    .unwrap()
+    .with_sda(peripherals.GPIO17)
+    .with_scl(peripherals.GPIO18)
+    .into_async();
+    info!("I2C bus initialized successfully (async mode)");
 
     let radio_init = esp_radio::init().expect("Failed to initialize Wi-Fi/BLE controller");
     let transport = BleConnector::new(&radio_init, peripherals.BT, Default::default()).unwrap();
@@ -333,6 +372,10 @@ async fn main(spawner: Spawner) -> ! {
     spawner.spawn(lora_experiment::lorawan::lorawan_task(device_storage)).unwrap();
     info!("LoRaWAN task spawned");
 
+    // Spawn display task
+    spawner.spawn(lora_experiment::display::display_task(i2c, device_storage, battery_monitor)).unwrap();
+    info!("Display task spawned");
+
     // Run BLE using join pattern (keeps everything in main's stack frame)
     // Create event handler for processing advertisements
     let handler = VictronEventHandler {
@@ -357,7 +400,10 @@ async fn main(spawner: Spawner) -> ! {
         async {
             loop {
                 // Read and display battery voltage
-                let battery_mv = battery_monitor.read_voltage_mv();
+                let battery_mv = {
+                    let mut monitor = battery_monitor.lock().await;
+                    monitor.read_voltage_mv().await
+                };
                 info!("Battery voltage: {}.{:02}V ({} mV)",
                     battery_mv / 1000,
                     (battery_mv % 1000) / 10,

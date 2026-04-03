@@ -6,6 +6,8 @@ use defmt::{error, info, warn};
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::mutex::Mutex;
 use embassy_time::{Delay, Duration, Timer};
+
+use crate::display::{LoRaWanState, LORAWAN_STATE};
 use esp_hal::gpio::{Input, InputConfig, Level, Output, OutputConfig};
 use esp_hal::spi::master::Config;
 use esp_hal::spi::master::Spi;
@@ -115,6 +117,9 @@ pub async fn lorawan_task(
     info!("  AppKey: {:#x}", appkey);
     info!("Joining LoRaWAN network");
 
+    // Signal that we're in joining state
+    LORAWAN_STATE.signal(LoRaWanState::Joining);
+
     let join_mode = JoinMode::OTAA {
         deveui: DevEui::from(deveui),
         appeui: AppEui::from(appeui),
@@ -128,6 +133,7 @@ pub async fn lorawan_task(
         match join_result {
             Ok(JoinResponse::JoinSuccess) => {
                 info!("LoRaWAN network joined");
+                LORAWAN_STATE.signal(LoRaWanState::Connected);
                 break;
             }
             Ok(JoinResponse::NoJoinAccept) => {
@@ -194,6 +200,7 @@ pub async fn lorawan_task(
                 match device.send(data, fport, confirmed).await {
                     Ok(response) => {
                         info!("Message sent successfully: {:?}", response);
+                        LORAWAN_STATE.signal(LoRaWanState::Connected);
 
                         // Check for downlink messages
                         if let Some(downlink) = device.take_downlink() {
@@ -206,6 +213,7 @@ pub async fn lorawan_task(
                     }
                     Err(e) => {
                         error!("Failed to send message: {}", e);
+                        LORAWAN_STATE.signal(LoRaWanState::Error);
                     }
                 }
             }

@@ -36,37 +36,57 @@ impl Device for SolarChargerData {
     }
 
     fn parse_decrypted(reader: &mut BitReader) -> Result<Self> {
-        // Read charge state (8 bits)
+        // Read device state (8 bits)
         let state_raw = reader.read_u8(8)?;
         let charge_state = OperationMode::from_u8(state_raw);
 
-        // Read battery voltage (16 bits, 0.01V resolution)
-        let voltage_raw = reader.read_u16(16)?;
-        let battery_voltage = (voltage_raw as f32) * 0.01;
+        // Read charger error (8 bits) - per PDF page 3
+        let error_raw = reader.read_u8(8)?;
+        let error = ChargerError::from_u8(error_raw);
 
-        // Read battery current (16 bits, 0.1A resolution)
-        let current_raw = reader.read_u16(16)?;
-        let battery_current = (current_raw as f32) * 0.1;
+        // Read battery voltage (16 bits, 0.01V resolution, signed)
+        // Range: -327.68..327.66 V, NA: 0x7FFF
+        let voltage_raw = reader.read_i16(16)?;
+        let battery_voltage = if voltage_raw == 0x7FFF {
+            0.0 // NA value
+        } else {
+            (voltage_raw as f32) * 0.01
+        };
 
-        // Read yield today (20 bits, 10Wh resolution)
-        let yield_raw = reader.read_u32(20)?;
-        let yield_today = yield_raw * 10;
+        // Read battery current (16 bits, 0.1A resolution, signed)
+        // Range: -3276.8..3276.6 A, NA: 0x7FFF
+        let current_raw = reader.read_i16(16)?;
+        let battery_current = if current_raw == 0x7FFF {
+            0.0 // NA value
+        } else {
+            (current_raw as f32) * 0.1
+        };
+
+        // Read yield today (16 bits, 0.01 kWh resolution)
+        // Convert to Wh: value * 0.01 kWh * 1000 = value * 10 Wh
+        let yield_raw = reader.read_u16(16)?;
+        let yield_today = if yield_raw == 0xFFFF {
+            0 // NA value
+        } else {
+            (yield_raw as u32) * 10 // Convert to Wh
+        };
 
         // Read PV power (16 bits, 1W resolution)
-        let pv_power = reader.read_u16(16)?;
+        let pv_power_raw = reader.read_u16(16)?;
+        let pv_power = if pv_power_raw == 0xFFFF {
+            0 // NA value
+        } else {
+            pv_power_raw
+        };
 
-        // Read load current (17 bits, 0.1A resolution)
-        // 0x1FFFF = not available
-        let load_raw = reader.read_u32(17)?;
-        let load_current = if load_raw == 0x1FFFF {
+        // Read load current (9 bits, 0.1A resolution)
+        // 0x1FF = not available
+        let load_raw = reader.read_u16(9)?;
+        let load_current = if load_raw == 0x1FF {
             None
         } else {
             Some((load_raw as f32) * 0.1)
         };
-
-        // Read charger error (8 bits)
-        let error_raw = reader.read_u8(8)?;
-        let error = ChargerError::from_u8(error_raw);
 
         Ok(SolarChargerData {
             charge_state,

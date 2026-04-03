@@ -33,7 +33,6 @@ impl<'a> VictronScanner<'a> {
     pub fn parse_manufacturer_data(&self, manufacturer_data: &[u8]) -> Result<DeviceData> {
         // Check minimum length
         if manufacturer_data.is_empty() {
-            #[cfg(feature = "defmt")]
             defmt::debug!("Empty manufacturer data");
             return Err(Error::InvalidAdvertisement);
         }
@@ -42,7 +41,6 @@ impl<'a> VictronScanner<'a> {
         // Note: In Victron's format, this 0x10 byte is actually part of the prefix,
         // not a separate field to be skipped!
         if manufacturer_data[0] != PRODUCT_ADVERTISEMENT_TYPE {
-            #[cfg(feature = "defmt")]
             defmt::debug!(
                 "Wrong product type: 0x{:02x}, expected 0x{:02x}",
                 manufacturer_data[0],
@@ -54,7 +52,6 @@ impl<'a> VictronScanner<'a> {
         // Parse advertisement structure (includes the 0x10 byte as part of prefix)
         let adv = Advertisement::parse(manufacturer_data)?;
 
-        #[cfg(feature = "defmt")]
         defmt::debug!(
             "Advertisement: prefix=0x{:04x}, model=0x{:04x}, readout_type=0x{:02x}, nonce=0x{:04x}",
             adv.prefix,
@@ -65,7 +62,8 @@ impl<'a> VictronScanner<'a> {
 
         // Try each key until one works
         for key in self.keys {
-            match detect_and_parse(&adv, key) {
+            defmt::debug!("Advertisement \n device type = {},\n model id {},\n encyped_data {},\n key {}", adv.device_type(), adv.model_id, adv.encrypted_data, key);
+           match detect_and_parse(&adv, key) {
                 Ok(data) => return Ok(data),
                 Err(Error::DecryptionFailed) => continue, // Try next key
                 Err(e) => {
