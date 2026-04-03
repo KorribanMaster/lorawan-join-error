@@ -97,7 +97,10 @@ pub fn pack_device_data(device_data: &DeviceData, output: &mut [u8]) -> usize {
             output[0] = 0x03; // Smart Lithium type ID
 
             // Pack voltage (mV) as 16-bit - handle Option
-            let voltage = data.battery_voltage.map(|v| (v * 1000.0) as u16).unwrap_or(0);
+            let voltage = data
+                .battery_voltage
+                .map(|v| (v * 1000.0) as u16)
+                .unwrap_or(0);
             output[1] = (voltage >> 8) as u8;
             output[2] = (voltage & 0xFF) as u8;
 
@@ -144,7 +147,10 @@ pub fn pack_device_data(device_data: &DeviceData, output: &mut [u8]) -> usize {
             }
             output[0] = 0x05; // Inverter type ID
 
-            let voltage = data.battery_voltage.map(|v| (v * 1000.0) as u16).unwrap_or(0);
+            let voltage = data
+                .battery_voltage
+                .map(|v| (v * 1000.0) as u16)
+                .unwrap_or(0);
             output[1] = (voltage >> 8) as u8;
             output[2] = (voltage & 0xFF) as u8;
 
@@ -216,8 +222,8 @@ pub fn unpack_device_data(payload: &[u8]) -> Option<alloc::string::String> {
         return None;
     }
 
-    use alloc::string::ToString;
     use alloc::format;
+    use alloc::string::ToString;
 
     match payload[0] {
         0x01 => {
@@ -256,10 +262,7 @@ pub fn unpack_device_data(payload: &[u8]) -> Option<alloc::string::String> {
             }
             let voltage = u16::from_be_bytes([payload[1], payload[2]]) as f32 / 1000.0;
             let temp = i16::from_be_bytes([payload[3], payload[4]]) as f32 / 10.0;
-            Some(format!(
-                "SmartLi: V={:.2}V T={:.1}°C",
-                voltage, temp
-            ))
+            Some(format!("SmartLi: V={:.2}V T={:.1}°C", voltage, temp))
         }
         _ => Some("Unknown device".to_string()),
     }
