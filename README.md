@@ -9,7 +9,7 @@ The codebase is organized into a nested workspace structure that separates hardw
 ```
 victron-ttn-gateway/                      # Root workspace (host-testable)
 ├── Cargo.toml                        # Root workspace manifest
-├── victron-protocol/                 # Hardware-independent protocol library
+├── victron-ble/                      # Hardware-independent BLE protocol library
 │   ├── Cargo.toml
 │   └── src/
 │       ├── lib.rs
@@ -125,10 +125,10 @@ The protocol library supports parsing data from 14 different Victron device type
 
 ### Adding Tests
 
-Tests should be added to the `victron-protocol` package where they can run on the host:
+Tests should be added to the `victron-ble` package where they can run on the host:
 
 ```rust
-// In victron-protocol/src/crypto.rs
+// In victron-ble/src/crypto.rs
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -142,9 +142,9 @@ mod tests {
 
 ### Adding Device Support
 
-1. Add parser in `victron-protocol/src/device/`
-2. Add variant to `DeviceData` enum in `victron-protocol/src/device/mod.rs`
-3. Add packing logic in `victron-protocol/src/victron_payload.rs`
+1. Add parser in `victron-ble/src/device/`
+2. Add variant to `DeviceData` enum in `victron-ble/src/device/mod.rs`
+3. Add packing logic in `victron-ble/src/victron_payload.rs`
 4. Write tests in the parser module
 
 ## License

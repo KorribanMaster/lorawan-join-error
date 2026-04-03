@@ -1,6 +1,6 @@
 //! Integration tests for Victron crypto module
 
-use victron_protocol::crypto::{decrypt, encrypt_for_test};
+use victron_ble::crypto::{decrypt, encrypt_for_test};
 
 #[test]
 fn test_encryption_roundtrip() {

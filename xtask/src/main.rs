@@ -37,7 +37,7 @@ fn print_help() {
     println!("    flash              Flash the embedded application to device (debug)");
     println!("    flash --release    Flash the embedded application to device (release)");
     println!("    test all           Run all tests (host + embedded build verification)");
-    println!("    test host          Run host tests for victron-protocol");
+    println!("    test host          Run host tests for victron-ble");
 }
 
 /// Build the embedded application in debug mode
@@ -85,11 +85,11 @@ fn test_all() -> Result<(), anyhow::Error> {
     Ok(())
 }
 
-/// Run host tests for victron-protocol
+/// Run host tests for victron-ble
 fn test_host() -> Result<(), anyhow::Error> {
-    println!("Running host tests for victron-protocol...");
+    println!("Running host tests for victron-ble...");
     let _p = xshell::pushd(root_dir())?;
-    cmd!("cargo test -p victron-protocol").run()?;
+    cmd!("cargo test -p victron-ble").run()?;
     println!("All host tests passed!");
     Ok(())
 }

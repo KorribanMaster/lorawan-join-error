@@ -1,5 +1,5 @@
 [workspace]
-members = ["victron-protocol", "xtask"]
+members = ["victron-ble", "xtask"]
 exclude = ["cross"]
 resolver = "2"
 

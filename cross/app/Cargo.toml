@@ -6,15 +6,15 @@ rust-version.workspace = true
 
 [features]
 default = ["defmt"]
-defmt = ["victron-protocol/defmt"]
+defmt = ["victron-ble/defmt"]
 
 [[bin]]
 name = "lora-experiment"
 path = "./src/bin/main.rs"
 
 [dependencies]
-# Victron protocol library (hardware-independent)
-victron-protocol = { path = "../../victron-protocol", default-features = false, features = ["defmt"] }
+# Victron BLE protocol library (hardware-independent)
+victron-ble = { path = "../../victron-ble", default-features = false, features = ["defmt"] }
 
 # ESP32-S3 HAL and RTOS
 esp-hal = { version = "1.0.0", features = ["defmt", "esp32s3", "unstable"] }

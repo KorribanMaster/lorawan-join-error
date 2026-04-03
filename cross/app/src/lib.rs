@@ -4,8 +4,8 @@ extern crate alloc;
 
 use rand::Rng as _;
 
-// Re-export victron-protocol for convenience
-pub use victron_protocol::*;
+// Re-export victron-ble for convenience
+pub use victron_ble::*;
 
 // LoRaWAN module
 pub mod lorawan;
