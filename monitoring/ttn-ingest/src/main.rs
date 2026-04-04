@@ -6,7 +6,11 @@ use influxdb2::Client;
 use reqwest;
 use serde::{Deserialize, Serialize};
 use std::env;
-use std::time::Duration;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, RwLock};
+use std::time::{Duration, Instant};
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::net::TcpListener;
 use tracing::{debug, error, info, warn};
 
 // TTN API Response structures
@@ -89,12 +93,78 @@ struct LoRaSettings {
     coding_rate: Option<String>,
 }
 
+// Health tracking structure
+#[derive(Clone)]
+struct HealthStatus {
+    last_message_time: Arc<RwLock<Instant>>,
+    messages_processed: Arc<AtomicU64>,
+    reconnect_count: Arc<AtomicU64>,
+    start_time: Instant,
+}
+
+impl HealthStatus {
+    fn new() -> Self {
+        Self {
+            last_message_time: Arc::new(RwLock::new(Instant::now())),
+            messages_processed: Arc::new(AtomicU64::new(0)),
+            reconnect_count: Arc::new(AtomicU64::new(0)),
+            start_time: Instant::now(),
+        }
+    }
+
+    fn update_message_received(&self) {
+        if let Ok(mut last_time) = self.last_message_time.write() {
+            *last_time = Instant::now();
+        }
+        self.messages_processed.fetch_add(1, Ordering::Relaxed);
+    }
+
+    fn update_reconnect(&self) {
+        self.reconnect_count.fetch_add(1, Ordering::Relaxed);
+    }
+
+    fn is_healthy(&self) -> bool {
+        if let Ok(last_time) = self.last_message_time.read() {
+            // Consider unhealthy if no message in 5 minutes
+            last_time.elapsed() < Duration::from_secs(300)
+        } else {
+            false
+        }
+    }
+
+    fn get_status(&self) -> HealthResponse {
+        let last_message_ago = if let Ok(last_time) = self.last_message_time.read() {
+            last_time.elapsed().as_secs()
+        } else {
+            0
+        };
+
+        HealthResponse {
+            status: if self.is_healthy() { "healthy" } else { "unhealthy" }.to_string(),
+            last_message_ago_secs: last_message_ago,
+            messages_processed: self.messages_processed.load(Ordering::Relaxed),
+            reconnect_count: self.reconnect_count.load(Ordering::Relaxed),
+            uptime_secs: self.start_time.elapsed().as_secs(),
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+struct HealthResponse {
+    status: String,
+    last_message_ago_secs: u64,
+    messages_processed: u64,
+    reconnect_count: u64,
+    uptime_secs: u64,
+}
+
 struct TtnIngestor {
     influx_client: Client,
     ttn_app_id: String,
     ttn_api_key: String,
     ttn_region: String,
     bucket: String,
+    health_status: HealthStatus,
 }
 
 impl TtnIngestor {
@@ -121,6 +191,7 @@ impl TtnIngestor {
             ttn_api_key,
             ttn_region,
             bucket,
+            health_status: HealthStatus::new(),
         })
     }
 
@@ -182,6 +253,7 @@ impl TtnIngestor {
         }
 
         info!("✓ Processed uplink from {}", device_id);
+        self.health_status.update_message_received();
         Ok(())
     }
 
@@ -532,7 +604,10 @@ impl TtnIngestor {
         info!("Connecting to TTN: {}", url);
 
         let client = reqwest::Client::builder()
-            .timeout(Duration::from_secs(300))
+            .timeout(Duration::from_secs(60))
+            .pool_max_idle_per_host(0) // Disable connection pooling to prevent stale connections
+            .pool_idle_timeout(Duration::from_secs(10))
+            .connect_timeout(Duration::from_secs(10))
             .build()?;
 
         let response = client
@@ -545,7 +620,9 @@ impl TtnIngestor {
             .context("Failed to connect to TTN")?;
 
         if !response.status().is_success() {
-            anyhow::bail!("TTN API returned status: {}", response.status());
+            let status = response.status();
+            let body = response.text().await.unwrap_or_else(|_| "<failed to read body>".to_string());
+            anyhow::bail!("TTN API returned status {}: {}", status, body);
         }
 
         info!("Connected to TTN stream");
@@ -582,22 +659,23 @@ impl TtnIngestor {
                         // Try to parse as TtnMessage
                         match serde_json::from_str::<TtnMessage>(json_str) {
                             Ok(message) => {
+                                let device_id = message.result.end_device_ids.device_id.clone();
                                 if let Err(e) = self.process_uplink(message).await {
-                                    error!("Failed to process uplink: {}", e);
+                                    error!("Failed to process uplink from {}: {:?}", device_id, e);
                                 }
                             }
                             Err(e) => {
                                 // Only log if it's not a keep-alive or comment
                                 if !json_str.starts_with(':') {
-                                    debug!("Failed to parse JSON (might be keep-alive): {}", e);
+                                    debug!("Failed to parse JSON (might be keep-alive): {:?}, raw: {}", e, json_str.chars().take(100).collect::<String>());
                                 }
                             }
                         }
                     }
                 }
                 Err(e) => {
-                    error!("Stream error: {}", e);
-                    anyhow::bail!("Stream interrupted: {}", e);
+                    error!("Stream error: {:?}", e);
+                    anyhow::bail!("Stream interrupted: {:?}", e);
                 }
             }
         }
@@ -607,17 +685,72 @@ impl TtnIngestor {
     }
 
     async fn run(&self) -> Result<()> {
+        let mut reconnect_count: u64 = 0;
         loop {
             match self.stream_uplinks().await {
                 Ok(_) => {
                     warn!("Stream ended normally, reconnecting...");
+                    reconnect_count = 0; // Reset on successful disconnect
                 }
                 Err(e) => {
-                    error!("Stream error: {}, reconnecting in 5s...", e);
+                    reconnect_count += 1;
+                    self.health_status.update_reconnect();
+                    error!("Stream error (attempt {}): {:?}, reconnecting in 5s...", reconnect_count, e);
                 }
             }
 
             tokio::time::sleep(Duration::from_secs(5)).await;
+        }
+    }
+}
+
+// Health check HTTP server
+async fn run_health_server(health_status: HealthStatus) {
+    let listener = match TcpListener::bind("0.0.0.0:8080").await {
+        Ok(l) => l,
+        Err(e) => {
+            error!("Failed to bind health server: {:?}", e);
+            return;
+        }
+    };
+
+    info!("Health server listening on http://0.0.0.0:8080");
+
+    loop {
+        match listener.accept().await {
+            Ok((mut socket, _)) => {
+                let health = health_status.clone();
+                tokio::spawn(async move {
+                    let mut buffer = [0; 512];
+                    if let Ok(n) = socket.read(&mut buffer).await {
+                        if n > 0 {
+                            let request = String::from_utf8_lossy(&buffer[..n]);
+
+                            // Simple HTTP request parsing
+                            if request.contains("GET /health") {
+                                let status = health.get_status();
+                                let json = serde_json::to_string(&status).unwrap_or_else(|_| "{}".to_string());
+                                let http_status = if health.is_healthy() { "200 OK" } else { "503 Service Unavailable" };
+
+                                let response = format!(
+                                    "HTTP/1.1 {}\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",
+                                    http_status,
+                                    json.len(),
+                                    json
+                                );
+
+                                let _ = socket.write_all(response.as_bytes()).await;
+                            } else {
+                                let response = "HTTP/1.1 404 Not Found\r\nContent-Length: 9\r\n\r\nNot Found";
+                                let _ = socket.write_all(response.as_bytes()).await;
+                            }
+                        }
+                    }
+                });
+            }
+            Err(e) => {
+                error!("Failed to accept connection: {:?}", e);
+            }
         }
     }
 }
@@ -635,5 +768,12 @@ async fn main() -> Result<()> {
     info!("Starting TTN Data Ingestor");
 
     let ingestor = TtnIngestor::new()?;
+
+    // Spawn health server in background
+    let health_status = ingestor.health_status.clone();
+    tokio::spawn(async move {
+        run_health_server(health_status).await;
+    });
+
     ingestor.run().await
 }
