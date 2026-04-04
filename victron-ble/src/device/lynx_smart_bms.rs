@@ -77,11 +77,12 @@ impl Device for LynxSmartBMSData {
         };
 
         // Parse consumed Ah (20 bits, 0.1Ah resolution)
+        // Note: Documentation specifies "Consumed Ah = -Record value"
         let consumed_ah_raw = reader.read_u32(20)?;
         let consumed_ah = if consumed_ah_raw == 0xFFFFF {
             None
         } else {
-            Some((consumed_ah_raw as f32) * 0.1)
+            Some((consumed_ah_raw as f32) * -0.1)
         };
 
         // Parse battery temperature (7 bits, Celsius with offset)
